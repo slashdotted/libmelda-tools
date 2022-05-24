@@ -1,5 +1,5 @@
 # libmelda-tools
-Tools for [libmelda](https://github.com/slashdotted/libmelda/) 
+Tools for [libmelda](https://github.com/slashdotted/libmelda/) (Melda is a Delta-State JSON CRDT)
 
 # Examples
 
