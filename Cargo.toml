@@ -9,4 +9,4 @@ license = "GPL-3.0"
 clap = { version = "3.1.6", features = ["derive"] }
 url = "2.2.2"
 serde_json = "1.0"
-melda = { git = "https://github.com/slashdotted/libmelda.git", rev = "7211157" }
+melda = { git = "https://github.com/slashdotted/libmelda.git", rev = "0bd4888" }
