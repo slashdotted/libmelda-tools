@@ -13,7 +13,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not,ls see <http://www.gnu.org/licenses/>.
-use std::sync::{Arc, RwLock};
+use std::{sync::{Arc, RwLock}, collections::VecDeque};
 
 use clap::{Parser, Subcommand};
 use melda::{
@@ -32,8 +32,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Adds files to myapp
     
+    /// Updates a Melda CRDT
     #[clap(arg_required_else_help = true)]
     Update { 
         #[clap(required = true,short, long)]
@@ -54,6 +54,7 @@ enum Commands {
         #[clap(short, long)]
         password: Option<String>
     },
+    /// Reads a Melda CRDT
     #[clap(arg_required_else_help = true)]
     Read {
         #[clap(required = true, short, long)]
@@ -63,8 +64,12 @@ enum Commands {
         username: Option<String>,
 
         #[clap(short, long)]
-        password: Option<String>
+        password: Option<String>,
+
+        #[clap(short, long)]
+        block: Option<String>
     },
+    /// Melds two Melda CRDTs
     #[clap(arg_required_else_help = true)]
     Meld {
         #[clap(required = true, short, long)]
@@ -85,6 +90,22 @@ enum Commands {
         #[clap(long)]
         tpassword: Option<String>,
     },
+    /// Show the log of a Melda CRDT
+    #[clap(arg_required_else_help = true)]
+    Log {
+        #[clap(required = true, short, long)]
+        source: Option<String>,
+
+        #[clap(short, long)]
+        username: Option<String>,
+
+        #[clap(short, long)]
+        password: Option<String>,
+
+        #[clap(short, long)]
+        block: Option<String>
+    },
+    /// Display some debug information about a Melda CRDT
     #[clap(arg_required_else_help = true)]
     Debug {
         #[clap(required = true, short, long)]
@@ -96,6 +117,40 @@ enum Commands {
         #[clap(short, long)]
         password: Option<String>
     },
+}
+
+fn print_block_detail(m : &Melda, block_id: &str, is_anchor: bool) -> Option<Vec<String>> {
+    if let Some(block) = m.get_block(block_id).expect("Failed to get block") {
+        let status;
+        match block.status {
+            melda::melda::Status::Unknown => status = "Unknown",
+            melda::melda::Status::Valid => status = "Valid",
+            melda::melda::Status::ValidAndApplied => status = "ValidAndApplied",
+            melda::melda::Status::Invalid => status = "Invalid",
+        }
+        if is_anchor {
+            println!("(A) Block: {} ({})", block_id, status);
+        } else if block.parents.is_none() {
+            println!("(O) Block: {} ({})", block_id, status);
+        } else {
+            println!("(-) Block: {} ({})", block_id, status);
+        }
+        if block.info.is_some() {
+            println!("\t\tInformation: {}", serde_json::to_string(&Value::from(block.info.unwrap())).unwrap())
+        }
+        if block.packs.is_some() {
+            println!("\t\tPacks: {:?}", block.packs.unwrap());
+        }
+        if block.parents.is_some() {
+            let parents = block.parents.unwrap();
+            println!("\t\tParents: {:?}", parents);
+            Some(parents)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }
 
 fn main() {
@@ -116,7 +171,7 @@ fn main() {
                     } else {
                         panic!("invalid_adapter");
                     };
-                    let mut m = Melda::new(Arc::new(RwLock::new(adapter))).unwrap();
+                    let mut m = Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                     let contents = std::fs::read_to_string(jsonfile.unwrap()).expect("Failed to read JSON file");
                     let v: Value = serde_json::from_str(&contents).expect("Not a JSON value");
                     let o = v.as_object().expect("Not an object");
@@ -129,9 +184,9 @@ fn main() {
                         i.insert("description".to_string(), Value::from(description.unwrap()));
                     }
                     let blockid = if i.is_empty() {
-                        m.commit(None, false)
+                        m.commit(None)
                     } else {
-                        m.commit(Some(i), false)
+                        m.commit(Some(i))
                     }.expect("Failed to commit");
                     if blockid.is_some() {
                         println!("Committed block {}", blockid.unwrap());
@@ -144,7 +199,7 @@ fn main() {
                 }
             }
         },
-        Commands::Read { source, username, password} => {
+        Commands::Read { source, username, password, block} => {
             match Url::parse(&source.unwrap()) {
                 Ok(url) => {
                     let adapter: Box<dyn Adapter> = if url.scheme().eq("file") {
@@ -159,10 +214,19 @@ fn main() {
                     } else {
                         panic!("invalid_adapter");
                     };
-                    let m = Melda::new(Arc::new(RwLock::new(adapter))).unwrap();
-                    let data = m.read().expect("Failed to read");
-                    let content = serde_json::to_string(&data).unwrap();
-                    println!("{}", content);
+                    
+                    if block.is_some() {
+                        let m = Melda::new_until(Arc::new(RwLock::new(adapter)), block.unwrap().as_str()).expect("Failed to inizialize Melda");
+                        let data = m.read().expect("Failed to read");
+                        let content = serde_json::to_string(&data).unwrap();
+                        println!("{}", content);
+                    } else {
+                        let m = Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                        let data = m.read().expect("Failed to read");
+                        let content = serde_json::to_string(&data).unwrap();
+                        println!("{}", content);
+                    }
+                    
                 },
                 _ => {
                     eprintln!("Invalid Url");
@@ -184,7 +248,7 @@ fn main() {
                     } else {
                         panic!("invalid_adapter");
                     };
-                    let m = Melda::new(Arc::new(RwLock::new(adapter))).unwrap();
+                    let m = Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                     m.debug();
                 },
                 _ => {
@@ -223,8 +287,8 @@ fn main() {
                                 panic!("Invalid target adapter");
                             };
 
-                            let s = Melda::new(Arc::new(RwLock::new(sadapter))).unwrap();
-                            let mut t = Melda::new(Arc::new(RwLock::new(tadapter))).unwrap();
+                            let s = Melda::new(Arc::new(RwLock::new(sadapter))).expect("Failed to inizialize source Melda");
+                            let mut t = Melda::new(Arc::new(RwLock::new(tadapter))).expect("Failed to inizialize target Melda");
                             println!("{:?}", t.meld(&s).expect("Failed to meld"));
                         },
                         _ => {
@@ -237,6 +301,61 @@ fn main() {
                 }
             }
         },
+        Commands::Log { source, username, password, block } => {
+            match Url::parse(&source.unwrap()) {
+                Ok(url) => {
+                    let adapter: Box<dyn Adapter> = if url.scheme().eq("file") {
+                        Box::new(FilesystemAdapter::new(url.path()).expect("cannot_initialize_adapter"))
+                    } else if url.scheme().eq("solid") {
+                        Box::new(
+                            SolidAdapter::new(
+                                "https://".to_string() + &url.host().unwrap().to_string(),
+                                url.path().to_string() + "/", username, password)
+                            .expect("cannot_initialize_adapter"),
+                        )
+                    } else {
+                        panic!("invalid_adapter");
+                    };
+                    if block.is_some() {
+                        let block = block.unwrap();
+                        let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &block).expect("Failed to inizialize Melda");
+                        let anchors = m.get_anchors();
+                        let mut to_visit = VecDeque::new();                    
+                        to_visit.push_back(block);
+                        while ! to_visit.is_empty() {
+                            let block = to_visit.pop_front().unwrap();
+                            match print_block_detail(&m, &block, anchors.contains(&block)) {
+                                Some(parents) => {
+                                    parents.into_iter().for_each(|p| to_visit.push_back(p));
+                                },
+                                None => {},
+                            }
+                        }
+                    } else {
+                        let m = Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                        let anchors = m.get_anchors();
+                        let mut to_visit = VecDeque::new();                    
+                        for a in &anchors{
+                            to_visit.push_back(a.clone());
+                        }
+                        while ! to_visit.is_empty() {
+                            let block = to_visit.pop_front().unwrap();
+                            match print_block_detail(&m, &block, anchors.contains(&block)) {
+                                Some(parents) => {
+                                    parents.into_iter().for_each(|p| to_visit.push_back(p.clone()));
+                                },
+                                None => {},
+                            }
+                        }
+                        
+                    }
+                    
+                },
+                _ => {
+                    eprintln!("Invalid Url");
+                }
+            }
+        }
     }
     
 }
