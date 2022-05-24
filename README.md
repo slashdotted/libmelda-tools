@@ -86,6 +86,6 @@ to obtain:
 ```
 
 # License
-(c)2021 Amos Brocco,
+(c)2021-2022 Amos Brocco,
 GPL v3
 
