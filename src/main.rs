@@ -105,35 +105,16 @@ enum Commands {
         #[clap(short, long)]
         block: Option<String>
     },
-    /// Display some debug information about a Melda CRDT
-    #[clap(arg_required_else_help = true)]
-    Debug {
-        #[clap(required = true, short, long)]
-        source: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>
-    },
 }
 
 fn print_block_detail(m : &Melda, block_id: &str, is_anchor: bool) -> Option<Vec<String>> {
     if let Some(block) = m.get_block(block_id).expect("Failed to get block") {
-        let status;
-        match block.status {
-            melda::melda::Status::Unknown => status = "Unknown",
-            melda::melda::Status::Valid => status = "Valid",
-            melda::melda::Status::ValidAndApplied => status = "ValidAndApplied",
-            melda::melda::Status::Invalid => status = "Invalid",
-        }
         if is_anchor {
-            println!("(A) Block: {} ({})", block_id, status);
+            println!("(A) Block: {}", block_id);
         } else if block.parents.is_none() {
-            println!("(O) Block: {} ({})", block_id, status);
+            println!("(O) Block: {}", block_id);
         } else {
-            println!("(-) Block: {} ({})", block_id, status);
+            println!("(-) Block: {}", block_id);
         }
         if block.info.is_some() {
             println!("\t\tInformation: {}", serde_json::to_string(&Value::from(block.info.unwrap())).unwrap())
@@ -227,29 +208,6 @@ fn main() {
                         println!("{}", content);
                     }
                     
-                },
-                _ => {
-                    eprintln!("Invalid Url");
-                }
-            }
-        },
-        Commands::Debug { source, username, password} => {
-            match Url::parse(&source.unwrap()) {
-                Ok(url) => {
-                    let adapter: Box<dyn Adapter> = if url.scheme().eq("file") {
-                        Box::new(FilesystemAdapter::new(url.path()).expect("cannot_initialize_adapter"))
-                    } else if url.scheme().eq("solid") {
-                        Box::new(
-                            SolidAdapter::new(
-                                "https://".to_string() + &url.host().unwrap().to_string(),
-                                url.path().to_string() + "/", username, password)
-                            .expect("cannot_initialize_adapter"),
-                        )
-                    } else {
-                        panic!("invalid_adapter");
-                    };
-                    let m = Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
-                    m.debug();
                 },
                 _ => {
                     eprintln!("Invalid Url");
