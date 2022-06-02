@@ -2,7 +2,7 @@
 name = "libmelda-tools"
 authors = ["Amos Brocco <amos.brocco@supsi.ch>"]
 edition = "2021"
-version = "0.1.0"
+version = "0.1.1"
 license = "GPL-3.0"
 
 [dependencies]

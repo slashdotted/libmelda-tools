@@ -15,6 +15,7 @@
 // along with this program.  If not,ls see <http://www.gnu.org/licenses/>.
 use std::{
     collections::VecDeque,
+    process::exit,
     sync::{Arc, RwLock},
 };
 
@@ -107,6 +108,69 @@ enum Commands {
 
         #[clap(short, long)]
         block: Option<String>,
+    },
+    /// Show which objects are in conflict
+    #[clap(arg_required_else_help = true)]
+    Conflicts {
+        #[clap(required = true, short, long)]
+        source: Option<String>,
+
+        #[clap(short, long)]
+        username: Option<String>,
+
+        #[clap(short, long)]
+        password: Option<String>,
+    },
+    /// Resolves a conflict by picking up a winner
+    #[clap(arg_required_else_help = true)]
+    Resolve {
+        #[clap(required = true, short, long)]
+        target: Option<String>,
+
+        #[clap(short, long)]
+        username: Option<String>,
+
+        #[clap(short, long)]
+        password: Option<String>,
+
+        #[clap(short, long)]
+        object: Option<String>,
+
+        #[clap(short, long)]
+        winner: Option<String>,
+    },
+    /// Prints the history of revisions of an object
+    #[clap(arg_required_else_help = true)]
+    History {
+        #[clap(required = true, short, long)]
+        source: Option<String>,
+
+        #[clap(short, long)]
+        username: Option<String>,
+
+        #[clap(short, long)]
+        password: Option<String>,
+
+        #[clap(short, long)]
+        object: String,
+    },
+    /// Prints the value of an object for the given revision (or the winner)
+    #[clap(arg_required_else_help = true)]
+    Value {
+        #[clap(required = true, short, long)]
+        source: Option<String>,
+
+        #[clap(short, long)]
+        username: Option<String>,
+
+        #[clap(short, long)]
+        password: Option<String>,
+
+        #[clap(short, long)]
+        object: String,
+
+        #[clap(short, long)]
+        revision: Option<String>,
     },
 }
 
@@ -310,6 +374,194 @@ fn main() {
                             }
                             None => {}
                         }
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Invalid source Url");
+            }
+        },
+        Commands::Conflicts {
+            source,
+            username,
+            password,
+        } => match Url::parse(&source.unwrap()) {
+            Ok(url) => {
+                let adapter = get_adapter(url, username, password);
+                let m =
+                    Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                let in_conflict = m.in_conflict();
+                for uuid in &in_conflict {
+                    println!("{}:", uuid);
+                    let winning = m.get_winner(uuid).unwrap();
+                    let winning_value = m.get_value(uuid, &winning).expect("cannot_get_value");
+                    println!(
+                        "\t🏆 {}: {}",
+                        winning,
+                        serde_json::to_string(&winning_value).unwrap()
+                    );
+                    for r in &m.get_conflicting(uuid).unwrap() {
+                        let conflict_value = m.get_value(uuid, &r).expect("cannot_get_value");
+                        println!(
+                            "\t🗲 {}: {}",
+                            r,
+                            serde_json::to_string(&conflict_value).unwrap()
+                        );
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Invalid Url");
+            }
+        },
+        Commands::Resolve {
+            target,
+            username,
+            password,
+            object,
+            winner,
+        } => match Url::parse(&target.unwrap()) {
+            Ok(url) => {
+                // Resolve specific uuid
+                let adapter = get_adapter(url, username, password);
+                let mut m =
+                    Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                if object.is_some() {
+                    let in_conflict = m.in_conflict();
+                    let uuid = object.unwrap();
+                    if !in_conflict.contains(&uuid) {
+                        eprintln!("{} has no conflicts", uuid);
+                        exit(1);
+                    }
+                    if winner.is_some() {
+                        let winner = winner.unwrap();
+                        let winning = m.get_winner(&uuid).unwrap();
+                        let conflicting = m.get_conflicting(&uuid).unwrap();
+                        if !conflicting.contains(&winner) && (&winning != &winner) {
+                            eprintln!("{} not a valid winner", winner);
+                            exit(2);
+                        } else {
+                            match m.resolve_as(&uuid, &winner) {
+                                Ok(w) => {
+                                    println!("{} resolved as {} (previous: {})", uuid, w, winning)
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "{} failed to resolve as {}: {}",
+                                        uuid,
+                                        winner,
+                                        e.to_string()
+                                    );
+                                    exit(3);
+                                }
+                            };
+                        }
+                    } else {
+                        let winning = m.get_winner(&uuid).unwrap();
+                        match m.resolve_as(&uuid, &winning) {
+                            Ok(w) => println!("{} resolved as {} (previous: {})", uuid, w, winning),
+                            Err(e) => {
+                                eprintln!(
+                                    "{} failed to resolve as {}: {}",
+                                    uuid,
+                                    winning,
+                                    e.to_string()
+                                );
+                                exit(3);
+                            }
+                        };
+                    }
+                } else {
+                    // Resolve all conflicts
+                    let in_conflict = m.in_conflict();
+                    for uuid in &in_conflict {
+                        let winning = m.get_winner(uuid).unwrap();
+                        match m.resolve_as(uuid, &winning) {
+                            Ok(w) => println!("{} resolved as {} (previous: {})", uuid, w, winning),
+                            Err(e) => {
+                                eprintln!(
+                                    "{} failed to resolve as {}: {}",
+                                    uuid,
+                                    winning,
+                                    e.to_string()
+                                );
+                                exit(3);
+                            }
+                        };
+                    }
+                }
+                m.commit(None).expect("Failed to commit changes");
+                println!("Committed changes");
+            }
+            _ => {
+                eprintln!("Invalid Url");
+            }
+        },
+        Commands::Value {
+            source,
+            username,
+            password,
+            object,
+            revision,
+        } => match Url::parse(&source.unwrap()) {
+            Ok(url) => {
+                // Resolve specific uuid
+                let adapter = get_adapter(url, username, password);
+                let m =
+                    Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                match revision {
+                    Some(r) => match m.get_value(&object, &r) {
+                        Ok(v) => {
+                            println!("{}", serde_json::to_string(&v).unwrap());
+                        }
+                        Err(e) => {
+                            eprintln!("Invalid object or revision {} {}: {}", object, r, e);
+                            exit(3);
+                        }
+                    },
+                    None => match m.get_winner(&object) {
+                        Ok(r) => match m.get_value(&object, &r) {
+                            Ok(v) => {
+                                println!("{}", serde_json::to_string(&v).unwrap());
+                            }
+                            Err(e) => {
+                                eprintln!("Invalid object or revision {} {}: {}", object, r, e);
+                                exit(3);
+                            }
+                        },
+                        Err(e) => {
+                            eprintln!("Invalid object {}: {}", object, e);
+                            exit(3);
+                        }
+                    },
+                }
+            }
+            _ => {
+                eprintln!("Invalid Url");
+            }
+        },
+        Commands::History {
+            source,
+            username,
+            password,
+            object,
+        } => match Url::parse(&source.unwrap()) {
+            Ok(url) => {
+                // Resolve specific uuid
+                let adapter = get_adapter(url, username, password);
+                let m =
+                    Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
+                match m.get_winner(&object) {
+                    Ok(w) => {
+                        let mut crev = Some(w);
+                        while crev.is_some() {
+                            println!("{}", crev.as_ref().unwrap().to_string());
+                            crev = m.get_parent_revision(&object, &crev.unwrap()).unwrap();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Invalid object {}: {}", object, e);
+                        exit(3);
                     }
                 }
             }
