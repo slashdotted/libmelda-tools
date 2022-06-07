@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not,ls see <http://www.gnu.org/licenses/>.
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
     process::exit,
     sync::{Arc, RwLock},
 };
@@ -346,26 +346,35 @@ fn main() {
                         .expect("Failed to inizialize Melda");
                     let anchors = m.get_anchors();
                     let mut to_visit = VecDeque::new();
+                    let mut visited = BTreeSet::new();
                     to_visit.push_back(block);
                     while !to_visit.is_empty() {
                         let block = to_visit.pop_front().unwrap();
+                        if visited.contains(&block) {
+                            continue;
+                        }
                         match print_block_detail(&m, &block, anchors.contains(&block)) {
                             Some(parents) => {
                                 parents.into_iter().for_each(|p| to_visit.push_back(p));
                             }
                             None => {}
                         }
+                        visited.insert(block);
                     }
                 } else {
                     let m = Melda::new(Arc::new(RwLock::new(adapter)))
                         .expect("Failed to inizialize Melda");
                     let anchors = m.get_anchors();
                     let mut to_visit = VecDeque::new();
+                    let mut visited = BTreeSet::new();
                     for a in &anchors {
                         to_visit.push_back(a.clone());
                     }
                     while !to_visit.is_empty() {
                         let block = to_visit.pop_front().unwrap();
+                        if visited.contains(&block) {
+                            continue;
+                        }
                         match print_block_detail(&m, &block, anchors.contains(&block)) {
                             Some(parents) => {
                                 parents
@@ -374,6 +383,7 @@ fn main() {
                             }
                             None => {}
                         }
+                        visited.insert(block);
                     }
                 }
             }
