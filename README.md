@@ -213,6 +213,42 @@ Both Alice and Bob can see the history of changes made to their replica using th
 ```bash
 ./target/debug/libmelda-tools log -s file://$(pwd)/todolist
 ```
+For Alice the result will look like:
+```
+(A) Block: d0d23eeaf013b216a32386e708fb37489743cb2c9c8153082fc8e944a91eedf6
+		Information: {"author":"Bob","description":"Add some todos"}
+		Packs: ["515ebf5ebd96fe8210945856d09b53fa673434291a598c893db76bed117b243e"]
+		Parents: ["460b4dd46257efbb018201d9c1ada3e165174241b8ef9a30f8f0f0b77a551283"]
+(A) Block: ec11159e3497a89d1f0cb23db2600239535c70cc35a4f4b5a96e1d561d2bead3
+		Information: {"author":"Alice","description":"Some more stuff to do"}
+		Packs: ["967e769c2b65c0a30a9aeed1350ed78c46e98073c61a23421e8a7c4b721e61d0"]
+		Parents: ["460b4dd46257efbb018201d9c1ada3e165174241b8ef9a30f8f0f0b77a551283"]
+(-) Block: 460b4dd46257efbb018201d9c1ada3e165174241b8ef9a30f8f0f0b77a551283
+		Information: {"author":"Alice","description":"Add buy milk"}
+		Packs: ["2b0a463fcba92d5cf7dae531a5c40b67aaa0f45ab351c15613534fb5bba28564"]
+		Parents: ["49ccea4d5797250208edf9bc5d0b89edf23c30a61f5cb3fafb87069f07276a62"]
+(O) Block: 49ccea4d5797250208edf9bc5d0b89edf23c30a61f5cb3fafb87069f07276a62
+		Information: {"author":"Alice","description":"First commit"}
+		Packs: ["b4e50e445542c4737f4cfd7a9193ffd3be3794049d361d114a44f36434257cb3"]
+```
+The list of delta blocks contains **origin** blocks (**(O)**) and **anchor** blocks (**(A)**). Origin blocks are the first one that have been created: in our scenario there is only one origin, since the CRDT was created on one replica only (by Alice). There are however two **anchor** blocks, namely *d0d23eeaf013b216a32386e708fb37489743cb2c9c8153082fc8e944a91eedf6* (created by Bob) and *ec11159e3497a89d1f0cb23db2600239535c70cc35a4f4b5a96e1d561d2bead3* (created by Alice). This is due to the merge/meld operation that was performed by Alice. Multiple anchors will be referenced by the next commit.
+
+Concurrent modifications made by Alice and Bob also resulted in a conflict. By default this is automatically hidden, since Melda can cope with this situation without problems. We can nonetheless show the conflicting information using the **conflicts** command:
+```bash
+./target/debug/libmelda-tools conflicts -s file://$(pwd)/todolist
+```
+This will show that the root document (√) has a conflict, and the conflicting versions will be shown (the one with 🏆 is the version currently chosen by Melda as the *winner*, conflicts are shown with 🗲):
+```
+√:
+	🏆 3-8f147f811da66dccc212b3147a185c7c68d365e02ae84614e6533b7857d4744a_6258b20: {"items♭":["alice_todo_01","bob_todo_01","bob_todo_02","alice_todo_02"],"software":"MeldaDo","version":"1.0.0"}
+	🗲 3-5bf6651423be2df90bf3a7250a5b8d7e457da397ab7a31bd24f96c099c183711_6258b20: {"items♭":["alice_todo_02","alice_todo_01","bob_todo_01","bob_todo_02"],"software":"MeldaDo","version":"1.0.0"}
+
+```
+Further updates will always consider the *winner*. We can however resolve the conflict (and make it disappear from the conflict view) using the **resolve** command:
+```bash
+./target/debug/libmelda-tools resolve -t file://$(pwd)/todolist
+```
+This command by default resolves all conflicts in all objects using the current *winner*. Different strategies can be chosen, in order to promote a different *winner*. The **conflicts** command will confirm that there are no conflicts.
 
 # Publications
 
