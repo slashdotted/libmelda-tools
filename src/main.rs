@@ -174,7 +174,7 @@ enum Commands {
     },
 }
 
-fn print_block_detail(m: &Melda, block_id: &str, is_anchor: bool) -> Option<Vec<String>> {
+fn print_block_detail(m: &Melda, block_id: &str, is_anchor: bool) -> Option<BTreeSet<String>> {
     if let Some(block) = m.get_block(block_id).expect("Failed to get block") {
         if is_anchor {
             println!("(A) Block: {}", block_id);
