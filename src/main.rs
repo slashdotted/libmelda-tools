@@ -20,10 +20,7 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use melda::{
-    adapter::Adapter, filesystemadapter::FilesystemAdapter, flate2adapter::Flate2Adapter,
-    melda::Melda, solidadapter::SolidAdapter,
-};
+use melda::melda::Melda;
 use serde_json::Value;
 use url::Url;
 
@@ -204,38 +201,6 @@ fn print_block_detail(m: &Melda, block_id: &str, is_anchor: bool) -> Option<BTre
     }
 }
 
-fn get_adapter(url: Url, username: Option<String>, password: Option<String>) -> Box<dyn Adapter> {
-    if url.scheme().eq("file") {
-        Box::new(FilesystemAdapter::new(url.path()).expect("cannot_initialize_adapter"))
-    } else if url.scheme().eq("solid") {
-        Box::new(
-            SolidAdapter::new(
-                "https://".to_string() + &url.host().unwrap().to_string(),
-                url.path().to_string() + "/",
-                username,
-                password,
-            )
-            .expect("cannot_initialize_adapter"),
-        )
-    } else if url.scheme().eq("file+flate") {
-        Box::new(Flate2Adapter::new(Arc::new(RwLock::new(Box::new(
-            FilesystemAdapter::new(url.path()).expect("cannot_initialize_adapter"),
-        )))))
-    } else if url.scheme().eq("solid+flate") {
-        Box::new(Flate2Adapter::new(Arc::new(RwLock::new(Box::new(
-            SolidAdapter::new(
-                "https://".to_string() + &url.host().unwrap().to_string(),
-                url.path().to_string() + "/",
-                username,
-                password,
-            )
-            .expect("cannot_initialize_adapter"),
-        )))))
-    } else {
-        panic!("invalid_adapter");
-    }
-}
-
 fn main() {
     let args = Cli::parse();
     match args.command {
@@ -248,7 +213,8 @@ fn main() {
             password,
         } => match Url::parse(&target.unwrap()) {
             Ok(url) => {
-                let adapter = get_adapter(url, username, password);
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
                 let mut m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 let contents =
@@ -257,11 +223,11 @@ fn main() {
                 let o = v.as_object().expect("Not an object");
                 m.update(o.clone()).expect("Failed to update");
                 let mut i = serde_json::Map::<String, Value>::new();
-                if author.is_some() {
-                    i.insert("author".to_string(), Value::from(author.unwrap()));
+                if let Some(author) = author {
+                    i.insert("author".to_string(), Value::from(author));
                 }
-                if description.is_some() {
-                    i.insert("description".to_string(), Value::from(description.unwrap()));
+                if let Some(description) = description {
+                    i.insert("description".to_string(), Value::from(description));
                 }
                 let blockid = if i.is_empty() {
                     m.commit(None)
@@ -269,8 +235,8 @@ fn main() {
                     m.commit(Some(i))
                 }
                 .expect("Failed to commit");
-                if blockid.is_some() {
-                    println!("Committed block {}", blockid.unwrap());
+                if let Some(blockid) = blockid {
+                    println!("Committed block {}", blockid);
                 } else {
                     println!("Nothing to commit");
                 }
@@ -286,11 +252,11 @@ fn main() {
             block,
         } => match Url::parse(&source.unwrap()) {
             Ok(url) => {
-                let adapter = get_adapter(url, username, password);
-                if block.is_some() {
-                    let m =
-                        Melda::new_until(Arc::new(RwLock::new(adapter)), block.unwrap().as_str())
-                            .expect("Failed to inizialize Melda");
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
+                if let Some(block) = block {
+                    let m = Melda::new_until(Arc::new(RwLock::new(adapter)), block.as_str())
+                        .expect("Failed to inizialize Melda");
                     let data = m.read().expect("Failed to read");
                     let content = serde_json::to_string(&data).unwrap();
                     println!("{}", content);
@@ -316,8 +282,10 @@ fn main() {
         } => match Url::parse(&source.unwrap()) {
             Ok(surl) => match Url::parse(&target.unwrap()) {
                 Ok(turl) => {
-                    let sadapter = get_adapter(surl, susername, spassword);
-                    let tadapter = get_adapter(turl, tusername, tpassword);
+                    let sadapter = melda::adapter::get_adapter(&surl, susername, spassword)
+                        .expect("Failed to setup source adapter");
+                    let tadapter = melda::adapter::get_adapter(&turl, tusername, tpassword)
+                        .expect("Failed to setup target adapter");
                     let s = Melda::new(Arc::new(RwLock::new(sadapter)))
                         .expect("Failed to inizialize source Melda");
                     let mut t = Melda::new(Arc::new(RwLock::new(tadapter)))
@@ -339,9 +307,9 @@ fn main() {
             block,
         } => match Url::parse(&source.unwrap()) {
             Ok(url) => {
-                let adapter = get_adapter(url, username, password);
-                if block.is_some() {
-                    let block = block.unwrap();
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
+                if let Some(block) = block {
                     let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &block)
                         .expect("Failed to inizialize Melda");
                     let anchors = m.get_anchors();
@@ -353,11 +321,10 @@ fn main() {
                         if visited.contains(&block) {
                             continue;
                         }
-                        match print_block_detail(&m, &block, anchors.contains(&block)) {
-                            Some(parents) => {
-                                parents.into_iter().for_each(|p| to_visit.push_back(p));
-                            }
-                            None => {}
+                        if let Some(parents) =
+                            print_block_detail(&m, &block, anchors.contains(&block))
+                        {
+                            parents.into_iter().for_each(|p| to_visit.push_back(p));
                         }
                         visited.insert(block);
                     }
@@ -375,13 +342,10 @@ fn main() {
                         if visited.contains(&block) {
                             continue;
                         }
-                        match print_block_detail(&m, &block, anchors.contains(&block)) {
-                            Some(parents) => {
-                                parents
-                                    .into_iter()
-                                    .for_each(|p| to_visit.push_back(p.clone()));
-                            }
-                            None => {}
+                        if let Some(parents) =
+                            print_block_detail(&m, &block, anchors.contains(&block))
+                        {
+                            parents.into_iter().for_each(|p| to_visit.push_back(p));
                         }
                         visited.insert(block);
                     }
@@ -397,7 +361,8 @@ fn main() {
             password,
         } => match Url::parse(&source.unwrap()) {
             Ok(url) => {
-                let adapter = get_adapter(url, username, password);
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 let in_conflict = m.in_conflict();
@@ -411,7 +376,7 @@ fn main() {
                         serde_json::to_string(&winning_value).unwrap()
                     );
                     for r in &m.get_conflicting(uuid).unwrap() {
-                        let conflict_value = m.get_value(uuid, &r).expect("cannot_get_value");
+                        let conflict_value = m.get_value(uuid, r).expect("cannot_get_value");
                         println!(
                             "\t🗲 {}: {}",
                             r,
@@ -433,21 +398,20 @@ fn main() {
         } => match Url::parse(&target.unwrap()) {
             Ok(url) => {
                 // Resolve specific uuid
-                let adapter = get_adapter(url, username, password);
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
                 let mut m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
-                if object.is_some() {
+                if let Some(uuid) = object {
                     let in_conflict = m.in_conflict();
-                    let uuid = object.unwrap();
                     if !in_conflict.contains(&uuid) {
                         eprintln!("{} has no conflicts", uuid);
                         exit(1);
                     }
-                    if winner.is_some() {
-                        let winner = winner.unwrap();
+                    if let Some(winner) = winner {
                         let winning = m.get_winner(&uuid).unwrap();
                         let conflicting = m.get_conflicting(&uuid).unwrap();
-                        if !conflicting.contains(&winner) && (&winning != &winner) {
+                        if !conflicting.contains(&winner) && (winning != winner) {
                             eprintln!("{} not a valid winner", winner);
                             exit(2);
                         } else {
@@ -456,12 +420,7 @@ fn main() {
                                     println!("{} resolved as {} (previous: {})", uuid, w, winning)
                                 }
                                 Err(e) => {
-                                    eprintln!(
-                                        "{} failed to resolve as {}: {}",
-                                        uuid,
-                                        winner,
-                                        e.to_string()
-                                    );
+                                    eprintln!("{} failed to resolve as {}: {}", uuid, winner, e);
                                     exit(3);
                                 }
                             };
@@ -471,12 +430,7 @@ fn main() {
                         match m.resolve_as(&uuid, &winning) {
                             Ok(w) => println!("{} resolved as {} (previous: {})", uuid, w, winning),
                             Err(e) => {
-                                eprintln!(
-                                    "{} failed to resolve as {}: {}",
-                                    uuid,
-                                    winning,
-                                    e.to_string()
-                                );
+                                eprintln!("{} failed to resolve as {}: {}", uuid, winning, e);
                                 exit(3);
                             }
                         };
@@ -489,12 +443,7 @@ fn main() {
                         match m.resolve_as(uuid, &winning) {
                             Ok(w) => println!("{} resolved as {} (previous: {})", uuid, w, winning),
                             Err(e) => {
-                                eprintln!(
-                                    "{} failed to resolve as {}: {}",
-                                    uuid,
-                                    winning,
-                                    e.to_string()
-                                );
+                                eprintln!("{} failed to resolve as {}: {}", uuid, winning, e);
                                 exit(3);
                             }
                         };
@@ -516,7 +465,8 @@ fn main() {
         } => match Url::parse(&source.unwrap()) {
             Ok(url) => {
                 // Resolve specific uuid
-                let adapter = get_adapter(url, username, password);
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 match revision {
@@ -558,14 +508,15 @@ fn main() {
         } => match Url::parse(&source.unwrap()) {
             Ok(url) => {
                 // Resolve specific uuid
-                let adapter = get_adapter(url, username, password);
+                let adapter = melda::adapter::get_adapter(&url, username, password)
+                    .expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 match m.get_winner(&object) {
                     Ok(w) => {
                         let mut crev = Some(w);
                         while crev.is_some() {
-                            println!("{}", crev.as_ref().unwrap().to_string());
+                            println!("{}", crev.as_ref().unwrap());
                             crev = m.get_parent_revision(&object, &crev.unwrap()).unwrap();
                         }
                     }
