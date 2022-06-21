@@ -22,7 +22,6 @@ use std::{
 use clap::{Parser, Subcommand};
 use melda::melda::Melda;
 use serde_json::Value;
-use url::Url;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libmelda-tools")]
@@ -48,24 +47,12 @@ enum Commands {
 
         #[clap(short, long)]
         description: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
     },
     /// Reads a Melda CRDT
     #[clap(arg_required_else_help = true)]
     Read {
         #[clap(required = true, short, long)]
         source: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
 
         #[clap(short, long)]
         block: Option<String>,
@@ -76,32 +63,14 @@ enum Commands {
         #[clap(required = true, short, long)]
         source: Option<String>,
 
-        #[clap(long)]
-        susername: Option<String>,
-
-        #[clap(long)]
-        spassword: Option<String>,
-
         #[clap(required = true, short, long)]
         target: Option<String>,
-
-        #[clap(long)]
-        tusername: Option<String>,
-
-        #[clap(long)]
-        tpassword: Option<String>,
     },
     /// Show the log of a Melda CRDT
     #[clap(arg_required_else_help = true)]
     Log {
         #[clap(required = true, short, long)]
         source: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
 
         #[clap(short, long)]
         block: Option<String>,
@@ -111,24 +80,12 @@ enum Commands {
     Conflicts {
         #[clap(required = true, short, long)]
         source: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
     },
     /// Resolves a conflict by picking up a winner
     #[clap(arg_required_else_help = true)]
     Resolve {
         #[clap(required = true, short, long)]
         target: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
 
         #[clap(short, long)]
         object: Option<String>,
@@ -143,12 +100,6 @@ enum Commands {
         source: Option<String>,
 
         #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
-
-        #[clap(short, long)]
         object: String,
     },
     /// Prints the value of an object for the given revision (or the winner)
@@ -156,12 +107,6 @@ enum Commands {
     Value {
         #[clap(required = true, short, long)]
         source: Option<String>,
-
-        #[clap(short, long)]
-        username: Option<String>,
-
-        #[clap(short, long)]
-        password: Option<String>,
 
         #[clap(short, long)]
         object: String,
@@ -209,12 +154,9 @@ fn main() {
             jsonfile,
             author,
             description,
-            username,
-            password,
-        } => match Url::parse(&target.unwrap()) {
-            Ok(url) => {
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+        } => {
+            if let Some(url) = target {
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 let mut m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 let contents =
@@ -241,19 +183,10 @@ fn main() {
                     println!("Nothing to commit");
                 }
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
-        Commands::Read {
-            source,
-            username,
-            password,
-            block,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(url) => {
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+        }
+        Commands::Read { source, block } => {
+            if let Some(url) = source {
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 if let Some(block) = block {
                     let m = Melda::new_until(Arc::new(RwLock::new(adapter)), block.as_str())
                         .expect("Failed to inizialize Melda");
@@ -268,47 +201,25 @@ fn main() {
                     println!("{}", content);
                 }
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
-        Commands::Meld {
-            source,
-            target,
-            susername,
-            spassword,
-            tusername,
-            tpassword,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(surl) => match Url::parse(&target.unwrap()) {
-                Ok(turl) => {
-                    let sadapter = melda::adapter::get_adapter(&surl, susername, spassword)
-                        .expect("Failed to setup source adapter");
-                    let tadapter = melda::adapter::get_adapter(&turl, tusername, tpassword)
-                        .expect("Failed to setup target adapter");
+        }
+        Commands::Meld { source, target } => {
+            if let Some(surl) = source {
+                if let Some(turl) = target {
+                    let sadapter =
+                        melda::adapter::get_adapter(&surl).expect("Failed to setup source adapter");
+                    let tadapter =
+                        melda::adapter::get_adapter(&turl).expect("Failed to setup target adapter");
                     let s = Melda::new(Arc::new(RwLock::new(sadapter)))
                         .expect("Failed to inizialize source Melda");
                     let mut t = Melda::new(Arc::new(RwLock::new(tadapter)))
                         .expect("Failed to inizialize target Melda");
                     println!("{:?}", t.meld(&s).expect("Failed to meld"));
                 }
-                _ => {
-                    eprintln!("Invalid target Url");
-                }
-            },
-            _ => {
-                eprintln!("Invalid source Url");
             }
-        },
-        Commands::Log {
-            source,
-            username,
-            password,
-            block,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(url) => {
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+        }
+        Commands::Log { source, block } => {
+            if let Some(url) = source {
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 if let Some(block) = block {
                     let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &block)
                         .expect("Failed to inizialize Melda");
@@ -351,18 +262,10 @@ fn main() {
                     }
                 }
             }
-            _ => {
-                eprintln!("Invalid source Url");
-            }
-        },
-        Commands::Conflicts {
-            source,
-            username,
-            password,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(url) => {
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+        }
+        Commands::Conflicts { source } => {
+            if let Some(url) = source {
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 let in_conflict = m.in_conflict();
@@ -385,21 +288,15 @@ fn main() {
                     }
                 }
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
+        }
         Commands::Resolve {
             target,
-            username,
-            password,
             object,
             winner,
-        } => match Url::parse(&target.unwrap()) {
-            Ok(url) => {
+        } => {
+            if let Some(url) = target {
                 // Resolve specific uuid
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 let mut m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 if let Some(uuid) = object {
@@ -452,21 +349,15 @@ fn main() {
                 m.commit(None).expect("Failed to commit changes");
                 println!("Committed changes");
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
+        }
         Commands::Value {
             source,
-            username,
-            password,
             object,
             revision,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(url) => {
+        } => {
+            if let Some(url) = source {
                 // Resolve specific uuid
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 match revision {
@@ -496,20 +387,11 @@ fn main() {
                     },
                 }
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
-        Commands::History {
-            source,
-            username,
-            password,
-            object,
-        } => match Url::parse(&source.unwrap()) {
-            Ok(url) => {
+        }
+        Commands::History { source, object } => {
+            if let Some(url) = source {
                 // Resolve specific uuid
-                let adapter = melda::adapter::get_adapter(&url, username, password)
-                    .expect("Failed to setup adapter");
+                let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 match m.get_winner(&object) {
@@ -526,9 +408,6 @@ fn main() {
                     }
                 }
             }
-            _ => {
-                eprintln!("Invalid Url");
-            }
-        },
+        }
     }
 }
