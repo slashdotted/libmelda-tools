@@ -157,7 +157,7 @@ fn main() {
         } => {
             if let Some(url) = target {
                 let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
-                let mut m =
+                let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 let contents =
                     std::fs::read_to_string(jsonfile.unwrap()).expect("Failed to read JSON file");
@@ -211,7 +211,7 @@ fn main() {
                         melda::adapter::get_adapter(&turl).expect("Failed to setup target adapter");
                     let s = Melda::new(Arc::new(RwLock::new(sadapter)))
                         .expect("Failed to inizialize source Melda");
-                    let mut t = Melda::new(Arc::new(RwLock::new(tadapter)))
+                    let t = Melda::new(Arc::new(RwLock::new(tadapter)))
                         .expect("Failed to inizialize target Melda");
                     println!("{:?}", t.meld(&s).expect("Failed to meld"));
                 }
@@ -297,7 +297,7 @@ fn main() {
             if let Some(url) = target {
                 // Resolve specific uuid
                 let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
-                let mut m =
+                let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 if let Some(uuid) = object {
                     let in_conflict = m.in_conflict();

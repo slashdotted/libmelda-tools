@@ -12,4 +12,4 @@ repository = "https://github.com/slashdotted/libmelda-tools"
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
 serde_json = "1.0"
-melda = "0.1.15"
+melda = { git = "https://github.com/slashdotted/libmelda.git", branch = "staging_overlay" }
