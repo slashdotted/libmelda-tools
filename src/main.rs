@@ -272,14 +272,15 @@ fn main() {
                 for uuid in &in_conflict {
                     println!("{}:", uuid);
                     let winning = m.get_winner(uuid).unwrap();
-                    let winning_value = m.get_value(uuid, &winning).expect("cannot_get_value");
+                    let winning_value =
+                        m.get_value(uuid, Some(&winning)).expect("cannot_get_value");
                     println!(
                         "\t🏆 {}: {}",
                         winning,
                         serde_json::to_string(&winning_value).unwrap()
                     );
                     for r in &m.get_conflicting(uuid).unwrap() {
-                        let conflict_value = m.get_value(uuid, r).expect("cannot_get_value");
+                        let conflict_value = m.get_value(uuid, Some(r)).expect("cannot_get_value");
                         println!(
                             "\t🗲 {}: {}",
                             r,
@@ -361,7 +362,7 @@ fn main() {
                 let m =
                     Melda::new(Arc::new(RwLock::new(adapter))).expect("Failed to inizialize Melda");
                 match revision {
-                    Some(r) => match m.get_value(&object, &r) {
+                    Some(r) => match m.get_value(&object, Some(&r)) {
                         Ok(v) => {
                             println!("{}", serde_json::to_string(&v).unwrap());
                         }
@@ -371,7 +372,7 @@ fn main() {
                         }
                     },
                     None => match m.get_winner(&object) {
-                        Ok(r) => match m.get_value(&object, &r) {
+                        Ok(r) => match m.get_value(&object, Some(&r)) {
                             Ok(v) => {
                                 println!("{}", serde_json::to_string(&v).unwrap());
                             }
