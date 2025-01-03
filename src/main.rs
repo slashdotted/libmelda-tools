@@ -178,7 +178,7 @@ fn main() {
                 }
                 .expect("Failed to commit");
                 if let Some(blockid) = blockid {
-                    println!("Committed block {}", blockid);
+                    println!("Committed block {}", blockid.first().unwrap());
                 } else {
                     println!("Nothing to commit");
                 }
@@ -188,7 +188,8 @@ fn main() {
             if let Some(url) = source {
                 let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 if let Some(block) = block {
-                    let m = Melda::new_until(Arc::new(RwLock::new(adapter)), block.as_str())
+                    let anchors = BTreeSet::from([block]);
+                    let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &anchors)
                         .expect("Failed to inizialize Melda");
                     let data = m.read().expect("Failed to read");
                     let content = serde_json::to_string(&data).unwrap();
@@ -221,7 +222,8 @@ fn main() {
             if let Some(url) = source {
                 let adapter = melda::adapter::get_adapter(&url).expect("Failed to setup adapter");
                 if let Some(block) = block {
-                    let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &block)
+                    let anchors = BTreeSet::from([block.clone()]);
+                    let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &anchors)
                         .expect("Failed to inizialize Melda");
                     let anchors = m.get_anchors();
                     let mut to_visit = VecDeque::new();

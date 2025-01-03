@@ -2,7 +2,7 @@
 name = "libmelda-tools"
 authors = ["Amos Brocco <amos.brocco@supsi.ch>"]
 edition = "2021"
-version = "0.1.4"
+version = "0.2.0"
 license = "GPL-3.0"
 description = "Command line utilities for Melda, a Delta-State JSON CRDT"
 homepage = "https://github.com/slashdotted/libmelda-tools"
