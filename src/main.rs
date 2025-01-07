@@ -191,13 +191,13 @@ fn main() {
                     let anchors = BTreeSet::from([block]);
                     let m = Melda::new_until(Arc::new(RwLock::new(adapter)), &anchors)
                         .expect("Failed to inizialize Melda");
-                    let data = m.read().expect("Failed to read");
+                    let data = m.read(None).expect("Failed to read");
                     let content = serde_json::to_string(&data).unwrap();
                     println!("{}", content);
                 } else {
                     let m = Melda::new(Arc::new(RwLock::new(adapter)))
                         .expect("Failed to inizialize Melda");
-                    let data = m.read().expect("Failed to read");
+                    let data = m.read(None).expect("Failed to read");
                     let content = serde_json::to_string(&data).unwrap();
                     println!("{}", content);
                 }
